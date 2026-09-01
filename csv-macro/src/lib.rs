@@ -25,18 +25,50 @@ pub fn csv_struct_macro(item: TokenStream) -> TokenStream {
         .filter(|field| field.ident.is_some())
         .collect::<Vec<&Field>>();
 
-    for i in named_fields.iter() {
-        println!("got named_field: {}", i.ident.clone().unwrap());
-        println!("got named_type : {:#?}", types::classify(&i.ty));
+    let mut field_tokens = Vec::<TokenStream2>::new();
+
+    for (i, item) in named_fields.iter().enumerate() {
+        println!("got named_field: {}", item.ident.clone().unwrap());
+        println!("got named_type : {:#?}", types::classify(&item.ty));
+
+        if let Some(idt) = &item.ident {
+            field_tokens.push(gen_construction_for_type(idt, &item.ty, i));
+        }
     }
 
-    return quote! {}.into();
+    return quote! {
+    //
+    impl<'a> Order<'a> {
+        pub fn from_string(string: &'a str) -> Result<Self, AppError> {
+            let split: Vec<&str> = string.split(',').collect();
+
+            let new = Self {
+                    #(#field_tokens)*
+            };
+
+            return Ok(new);
+        }
+    }
+    //
+            }
+    .into();
 }
 
-fn gen_construction_for_type(name: &syn::Ident, ty: &syn::Type) -> TokenStream2 {
+fn gen_construction_for_type(
+    name: &syn::Ident,
+    ty: &syn::Type,
+    split_index: usize,
+) -> TokenStream2 {
     match types::classify(ty) {
-        FieldType::StringLiteral => quote::quote! {},
-        FieldType::DateTime => quote::quote! {},
+        FieldType::StringLiteral => quote::quote! {
+            #name : split[#split_index],
+        },
+        FieldType::DateTime => quote::quote! {
+            #name: match parse_datetime(split[#split_index]) {
+                Ok(val) => val,
+                Err(_) => return Err(AppError::FileParsingError(String::from(split[#split_index]))),
+            },
+        },
         FieldType::Other(val) => match val {
             Some(val) => panic!("Found unsupported type {:#?}", val),
             _ => panic!("Got some unsupported type"),
