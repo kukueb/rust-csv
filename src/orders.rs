@@ -12,7 +12,7 @@ pub struct Order<'sus> {
     driver_id: &'sus str,
     time_stamp: NaiveDateTime,
     // #[split_skip_to(7)]
-    #[split_skip_amount(2)] // equivalent for current table
+    #[split_skip_amount(2)] // equivalent of the previous line for the current table
     day_of_week: &'sus str,
     is_weekend: bool,
     city: &'sus str,
