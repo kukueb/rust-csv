@@ -4,6 +4,7 @@ use syn::{Type, TypeReference};
 pub enum FieldType {
     StringLiteral,
     DateTime,
+    Boolean,
     Other(Option<String>),
 }
 pub fn classify(ty: &Type) -> FieldType {
@@ -13,6 +14,7 @@ pub fn classify(ty: &Type) -> FieldType {
                 let ident: String = segment.ident.to_string();
                 return match ident.as_str() {
                     "NaiveDateTime" => FieldType::DateTime,
+                    "bool" => FieldType::Boolean,
                     val => {
                         // println!("Strange type found in struct: {}", val);
                         return FieldType::Other(Some(String::from(val)));
@@ -31,4 +33,14 @@ pub fn classify(ty: &Type) -> FieldType {
     }
 
     return FieldType::Other(None);
+}
+
+pub enum SplitType {
+    SplitIndex(usize),
+
+    /// Skips to the index
+    SplitSkip(usize),
+
+    /// Skips some amount of columns
+    SplitSkipAmount(usize),
 }

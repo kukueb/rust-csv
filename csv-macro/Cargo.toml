@@ -11,3 +11,6 @@ syn = "3.0.4"
 
 [lib]
 proc-macro = true
+
+[features]
+debug-macro = []

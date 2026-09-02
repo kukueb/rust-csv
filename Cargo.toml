@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 chrono = "0.4.45"
-csv-macro = { path = "csv-macro" }
+csv-macro = { path = "csv-macro", features = ["debug-macro"]}
