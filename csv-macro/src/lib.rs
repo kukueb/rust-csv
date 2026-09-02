@@ -27,26 +27,32 @@ pub fn csv_struct_macro(item: TokenStream) -> TokenStream {
         .filter(|field| field.ident.is_some())
         .collect::<Vec<&Field>>();
 
-    let mut field_generators = Vec::<TokenStream2>::new();
+    let from_string: TokenStream2 = gen_from_string(struct_name, &named_fields);
 
-    for (i, item) in named_fields.iter().enumerate() {
-        println!("got named_field: {}", item.ident.clone().unwrap());
-        println!("got named_type : {:#?}", types::classify(&item.ty));
-
-        if let Some(idt) = &item.ident {
-            field_generators.push(gen_construction_for_type(idt, &item.ty, i));
-        }
-    }
-
-    let (format_parts, arg_exprs): (Vec<String>, Vec<TokenStream2>) = named_fields
-        .iter()
-        .filter_map(|item| gen_display_for_type(item.ident.clone(), &item.ty))
-        .unzip();
-
-    let format_string: String = format_parts.join("\n");
+    let display: TokenStream2 = gen_whole_display(struct_name, &named_fields);
 
     return quote! {
-        //
+    //
+    #from_string
+    //
+    #display
+    //
+    fn parse_datetime(string: &str) -> Result<NaiveDateTime, ParseError> {
+        return NaiveDateTime::parse_from_str(string, "%Y-%m-%d %H:%M:%S");
+    }
+    //
+                }
+    .into();
+}
+
+fn gen_from_string(struct_name: &syn::Ident, named_fields: &Vec<&Field>) -> TokenStream2 {
+    let field_generators: Vec<TokenStream2> = named_fields
+        .iter()
+        .enumerate()
+        .filter_map(|(i, item)| gen_construction_for_type(item.ident.clone(), &item.ty, i))
+        .collect();
+
+    return quote! {
         impl<'a> #struct_name<'a> {
             pub fn from_string(string: &'a str) -> Result<Self, AppError> {
                 let split: Vec<&str> = string.split(',').collect();
@@ -58,31 +64,24 @@ pub fn csv_struct_macro(item: TokenStream) -> TokenStream {
                 return Ok(new);
             }
         }
-        //
-        impl fmt::Display for #struct_name<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //             return write!(
-    //                 f,
-    //                 "
-    // order_id = {},
-    // customer_id = {},
-    // restaurant_id = {},
-    // driver_id = {},
-    // time_stamp={}
-    // ",
-    //                 self.order_id, self.customer_id, self.restaurant_id, self.driver_id, self.time_stamp.format("%Y-%m-%d %H:%M:%S")
-    //             );
+    };
+}
 
-                return write!(f, #format_string, #(#arg_exprs),*);
+fn gen_whole_display(struct_name: &syn::Ident, named_fields: &Vec<&Field>) -> TokenStream2 {
+    let (format_parts, arg_exprs): (Vec<String>, Vec<TokenStream2>) = named_fields
+        .iter()
+        .filter_map(|item| gen_display_for_type(item.ident.clone(), &item.ty))
+        .unzip();
+
+    let format_string: String = format_parts.join("\n");
+
+    return quote! {
+        impl fmt::Display for #struct_name<'_> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    return write!(f, #format_string, #(#arg_exprs),*);
+                }
             }
-        }
-        //
-        fn parse_datetime(string: &str) -> Result<NaiveDateTime, ParseError> {
-            return NaiveDateTime::parse_from_str(string, "%Y-%m-%d %H:%M:%S");
-        }
-        //
-                    }
-    .into();
+    };
 }
 
 fn gen_display_for_type(
@@ -105,20 +104,27 @@ fn gen_display_for_type(
 }
 
 fn gen_construction_for_type(
-    name: &syn::Ident,
+    name: Option<syn::Ident>,
     ty: &syn::Type,
     split_index: usize,
-) -> TokenStream2 {
+) -> Option<TokenStream2> {
+    let real_name: syn::Ident;
+
+    match name {
+        Some(val) => real_name = val,
+        _ => return None,
+    }
+
     match types::classify(ty) {
-        FieldType::StringLiteral => quote::quote! {
-            #name : split[#split_index],
-        },
-        FieldType::DateTime => quote::quote! {
-            #name: match parse_datetime(split[#split_index]) {
+        FieldType::StringLiteral => Some(quote::quote! {
+            #real_name : split[#split_index],
+        }),
+        FieldType::DateTime => Some(quote::quote! {
+            #real_name: match parse_datetime(split[#split_index]) {
                 Ok(val) => val,
                 Err(_) => return Err(AppError::FileParsingError(String::from(split[#split_index]))),
             },
-        },
+        }),
         FieldType::Other(val) => match val {
             Some(val) => panic!("Found unsupported type {:#?}", val),
             _ => panic!("Got some unsupported type"),
